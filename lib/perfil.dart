@@ -1,8 +1,10 @@
 // Elite Ambassadors – perfil.dart
-// Version: v0.2.0
-// - v0.2.0: Perfil con foto por URL, nombre de red y notificaciones (mock).
+// Version: v0.2.1
+// - Perfil con foto por URL, nombre de red y notificaciones (mock).
+// - Cerrar sesión REAL con FirebaseAuth.
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // ✅ import aquí ARRIBA
 import 'core/locator.dart';
 import 'core/models.dart';
 
@@ -50,71 +52,101 @@ class _PerfilScreenState extends State<PerfilScreen> {
 
         return SingleChildScrollView(
           padding: const EdgeInsets.all(16),
-          child: Column(crossAxisAlignment: CrossAxisAlignment.stretch, children: [
-            Row(children: [
-              avatar,
-              const SizedBox(width: 12),
-              Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                Text(u.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
-                Text('Rango: ${u.rank}', style: const TextStyle(color: Colors.grey)),
-              ])),
-            ]),
-            const SizedBox(height: 16),
-
-            // URL de foto
-            TextField(
-              controller: _photoCtrl,
-              decoration: const InputDecoration(
-                labelText: 'URL de foto (temporal, sin subir archivo)',
-                border: OutlineInputBorder(),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  avatar,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(u.name, style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 18)),
+                        const SizedBox(height: 2),
+                        Text('Rango: ${u.rank}', style: const TextStyle(color: Colors.grey)),
+                      ],
+                    ),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 16),
 
-            // Nombre de la red (cosmético)
-            TextField(
-              controller: _networkNameCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Nombre de tu red (cosmético)',
-                border: OutlineInputBorder(),
+              // URL de foto
+              TextField(
+                controller: _photoCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'URL de foto (temporal, sin subir archivo)',
+                  border: OutlineInputBorder(),
+                ),
               ),
-            ),
-            const SizedBox(height: 12),
+              const SizedBox(height: 12),
 
-            // Notificaciones
-            SwitchListTile(
-              value: _notifications,
-              onChanged: (v) => setState(() => _notifications = v),
-              title: const Text('Notificaciones'),
-              subtitle: const Text('Activa/desactiva avisos en la app'),
-            ),
-            const SizedBox(height: 8),
+              // Nombre de la red (cosmético)
+              TextField(
+                controller: _networkNameCtrl,
+                decoration: const InputDecoration(
+                  labelText: 'Nombre de tu red (cosmético)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
 
-            // Acciones
-            FilledButton(
-              onPressed: _saving ? null : () async {
-                setState(() => _saving = true);
-                await Locator.I.userRepo.updatePhotoUrl(_photoCtrl.text.trim());
-                await Locator.I.userRepo.updateNetworkName(_networkNameCtrl.text.trim());
-                await Locator.I.userRepo.updateNotifications(_notifications);
-                final refreshed = await Locator.I.userRepo.getSummary();
-                if (!mounted) return;
-                setState(() {
-                  _future = Future.value(refreshed);
-                  _saving = false;
-                });
-                ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Perfil actualizado')));
-              },
-              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator()) : const Text('Guardar cambios'),
-            ),
+              // Notificaciones
+              SwitchListTile(
+                value: _notifications,
+                onChanged: (v) => setState(() => _notifications = v),
+                title: const Text('Notificaciones'),
+                subtitle: const Text('Activa/desactiva avisos en la app'),
+              ),
+              const SizedBox(height: 8),
 
-            const SizedBox(height: 16),
-            OutlinedButton.icon(
-              onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cerrar sesión (demo)'))),
-              icon: const Icon(Icons.logout),
-              label: const Text('Cerrar sesión'),
-            ),
-          ]),
+              // Guardar cambios
+              FilledButton(
+                onPressed: _saving
+                    ? null
+                    : () async {
+                        setState(() => _saving = true);
+                        await Locator.I.userRepo.updatePhotoUrl(_photoCtrl.text.trim());
+                        await Locator.I.userRepo.updateNetworkName(_networkNameCtrl.text.trim());
+                        await Locator.I.userRepo.updateNotifications(_notifications);
+                        final refreshed = await Locator.I.userRepo.getSummary();
+                        if (!mounted) return;
+                        setState(() {
+                          _future = Future.value(refreshed);
+                          _saving = false;
+                        });
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('Perfil actualizado')),
+                        );
+                      },
+                child: _saving
+                    ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator())
+                    : const Text('Guardar cambios'),
+              ),
+
+              const SizedBox(height: 16),
+
+              // ✅ Cerrar sesión REAL
+              OutlinedButton.icon(
+                icon: const Icon(Icons.logout),
+                label: const Text('Cerrar sesión'),
+                onPressed: () async {
+                  try {
+                    await FirebaseAuth.instance.signOut();
+                    // No navegamos manualmente: AuthGate en main.dart nos lleva a Login.
+                  } catch (e) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text('Error al cerrar sesión: $e')),
+                      );
+                    }
+                  }
+                },
+              ),
+            ],
+          ),
         );
       },
     );

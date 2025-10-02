@@ -1,8 +1,9 @@
 // Elite Ambassadors – login.dart
-// Version: v0.2.0
-// - v0.2.0: Login mock (email/pass). Luego conectamos Firebase Auth.
+// Version: v0.3.1
+// - Conecta login real a FirebaseAuth (sin navegación manual; AuthGate decide)
 
 import 'package:flutter/material.dart';
+import 'package:firebase_auth/firebase_auth.dart'; // 👈 NUEVO
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});
@@ -72,7 +73,7 @@ class _LoginPageState extends State<LoginPage> {
                   Align(
                     alignment: Alignment.centerRight,
                     child: TextButton(
-                      onPressed: () => ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Recuperar contraseña (demo)'))),
+                      onPressed: _loading ? null : _onForgotPass, // 👈 CAMBIO (antes demo)
                       child: const Text('Forgot password?'),
                     ),
                   ),
@@ -84,7 +85,7 @@ class _LoginPageState extends State<LoginPage> {
                         backgroundColor: const Color(0xFFBF0A30),
                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(28)),
                       ),
-                      onPressed: _loading ? null : _onLogin,
+                      onPressed: _loading ? null : _onLogin, // 👈 CAMBIO (ahora login real)
                       child: _loading
                           ? const SizedBox(width: 22, height: 22, child: CircularProgressIndicator())
                           : const Text('LOG IN', style: TextStyle(fontWeight: FontWeight.w800, letterSpacing: 1.0)),
@@ -102,9 +103,70 @@ class _LoginPageState extends State<LoginPage> {
   Future<void> _onLogin() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
-    await Future.delayed(const Duration(milliseconds: 700)); // demo
-    if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/tabs');
+
+    try {
+      final email = _emailCtrl.text.trim();
+      final pass  = _passCtrl.text;
+
+      // 👇 NUEVO: Autenticación REAL con Firebase
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: email,
+        password: pass,
+      );
+
+      // ✅ SIN Navigator: el AuthGate en main.dart detecta el user y muestra el dashboard.
+
+    } on FirebaseAuthException catch (e) {
+      final msg = switch (e.code) {
+        'invalid-credential' || 'wrong-password' => 'Correo o contraseña incorrectos.',
+        'user-not-found' => 'No existe una cuenta con este correo.',
+        'too-many-requests' => 'Demasiados intentos. Intenta de nuevo más tarde.',
+        'network-request-failed' => 'Sin conexión. Revisa tu internet.',
+        _ => 'No se pudo iniciar sesión (${e.code}).'
+      };
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error inesperado al iniciar sesión.')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _onForgotPass() async { // 👈 NUEVO
+    final email = _emailCtrl.text.trim();
+    if (email.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Escribe tu email para recuperar la contraseña')),
+      );
+      return;
+    }
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: email);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Te enviamos un correo para restablecer la contraseña.')),
+        );
+      }
+    } on FirebaseAuthException catch (e) {
+      final msg = (e.code == 'user-not-found')
+          ? 'No existe una cuenta con ese correo.'
+          : 'No se pudo enviar el correo (${e.code}).';
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Error inesperado.')),
+        );
+      }
+    }
   }
 }
 
@@ -136,7 +198,6 @@ class _LogoMarca extends StatelessWidget {
     );
   }
 }
-
 
 class _Input extends StatelessWidget {
   const _Input({
