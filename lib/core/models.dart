@@ -1,99 +1,31 @@
 // lib/core/models.dart
-// Modelos base (mock)
+import 'package:cloud_firestore/cloud_firestore.dart';
 
+// ===== PERFIL / USUARIO =====
 class UserSummary {
-  final String uid;
   final String name;
   final String rank;
   final String code;
-  final String nextRank;
-  final double progress;
-  final int directs;
-  final int network;
-  final int activeThisMonth;
   final String? photoUrl;
-  final String networkName;
+  final String? networkName;
   final bool notificationsEnabled;
 
   const UserSummary({
-    required this.uid,
     required this.name,
     required this.rank,
     required this.code,
-    required this.nextRank,
-    required this.progress,
-    required this.directs,
-    required this.network,
-    required this.activeThisMonth,
-    required this.photoUrl,
-    required this.networkName,
-    required this.notificationsEnabled,
-  });
-
-  UserSummary copyWith({
-    String? name,
-    String? rank,
-    String? code,
-    String? nextRank,
-    double? progress,
-    int? directs,
-    int? network,
-    int? activeThisMonth,
-    String? photoUrl,
-    String? networkName,
-    bool? notificationsEnabled,
-  }) {
-    return UserSummary(
-      uid: uid,
-      name: name ?? this.name,
-      rank: rank ?? this.rank,
-      code: code ?? this.code,
-      nextRank: nextRank ?? this.nextRank,
-      progress: progress ?? this.progress,
-      directs: directs ?? this.directs,
-      network: network ?? this.network,
-      activeThisMonth: activeThisMonth ?? this.activeThisMonth,
-      photoUrl: photoUrl ?? this.photoUrl,
-      networkName: networkName ?? this.networkName,
-      notificationsEnabled: notificationsEnabled ?? this.notificationsEnabled,
-    );
-  }
-}
-
-class PayoutMonth {
-  final String monthKey;
-  final int total;
-  final String status;
-  final List<PayoutItem> items;
-  const PayoutMonth({
-    required this.monthKey,
-    required this.total,
-    required this.status,
-    required this.items,
+    this.photoUrl,
+    this.networkName,
+    this.notificationsEnabled = true,
   });
 }
 
-class PayoutItem {
-  final String id;
-  final String type; // direct | bonus | payment
-  final int amount;
-  final DateTime date;
-  final String source;
-  final String status; // confirmed | pending | paid
-  const PayoutItem({
-    required this.id,
-    required this.type,
-    required this.amount,
-    required this.date,
-    required this.source,
-    required this.status,
-  });
-}
-
+// ===== ESTADÍSTICAS RED =====
 class NetworkStats {
   final int directs;
   final int networkSize;
   final double balance;
+
   const NetworkStats({
     required this.directs,
     required this.networkSize,
@@ -101,40 +33,144 @@ class NetworkStats {
   });
 }
 
-// ---- Bonos y logros
+// ===== BONOS / LOGROS =====
 class BonusTier {
   final int volume;
-  final int reward;
-  const BonusTier(this.volume, this.reward);
+  final double reward;
+  const BonusTier({required this.volume, required this.reward});
 }
 
 class Achievement {
-  final String id;
   final String title;
   final String description;
   final bool unlocked;
   final DateTime? unlockedAt;
+
   const Achievement({
-    required this.id,
     required this.title,
     required this.description,
-    required this.unlocked,
+    this.unlocked = false,
     this.unlockedAt,
   });
 }
 
-// ---- Afiliados
-enum AffiliatesFilter { all, direct, active }
+class Payout {
+  final String id;
+  final double amount;
+  final DateTime date;
 
+  const Payout({required this.id, required this.amount, required this.date});
+}
+
+// ===== RED & REFERIDOS =====
 class Affiliate {
   final String name;
   final bool active;
   final bool direct;
   final DateTime joinedAt;
+
   const Affiliate({
     required this.name,
     required this.active,
     required this.direct,
     required this.joinedAt,
   });
+}
+
+class Referido {
+  final String id;
+  final String nombre;
+  final String correo;
+  final String telefono;
+  final bool activo;
+  final DateTime alta;
+
+  const Referido({
+    required this.id,
+    required this.nombre,
+    required this.correo,
+    required this.telefono,
+    required this.activo,
+    required this.alta,
+  });
+
+  factory Referido.fromFirestore(String id, Map<String, dynamic> d) {
+    final altaRaw = d['alta'];
+    DateTime parsed;
+    if (altaRaw is Timestamp) {
+      parsed = altaRaw.toDate();
+    } else if (altaRaw is int) {
+      parsed = DateTime.fromMillisecondsSinceEpoch(altaRaw);
+    } else if (altaRaw is String) {
+      parsed = DateTime.tryParse(altaRaw) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+    } else {
+      parsed = DateTime.fromMillisecondsSinceEpoch(0);
+    }
+
+    return Referido(
+      id: id,
+      nombre: (d['nombre'] ?? '') as String,
+      correo: (d['correo'] ?? '') as String,
+      telefono: (d['telefono'] ?? '') as String,
+      activo: (d['activo'] ?? false) as bool,
+      alta: parsed,
+    );
+  }
+}
+
+// ===== PAGOS =====
+class Pago {
+  final String id;
+  final double monto;
+  /// "pagado" | "pendiente" | "rechazado"
+  final String estatus;
+  final DateTime fecha;
+
+  Pago({
+    required this.id,
+    required this.monto,
+    required this.estatus,
+    required this.fecha,
+  });
+
+  factory Pago.fromFirestore(String id, Map<String, dynamic> d) {
+    final rawFecha = d['fecha'];
+    DateTime parsed;
+    if (rawFecha is Timestamp) {
+      parsed = rawFecha.toDate();
+    } else if (rawFecha is int) {
+      parsed = DateTime.fromMillisecondsSinceEpoch(rawFecha);
+    } else if (rawFecha is String) {
+      parsed = DateTime.tryParse(rawFecha) ??
+          DateTime.fromMillisecondsSinceEpoch(0);
+    } else {
+      parsed = DateTime.fromMillisecondsSinceEpoch(0);
+    }
+
+    return Pago(
+      id: id,
+      monto: (d['monto'] as num?)?.toDouble() ?? 0.0,
+      estatus: (d['estatus'] ?? '').toString(),
+      fecha: parsed,
+    );
+  }
+
+  // === utilidades de formato sin 'intl' ===
+  String get fechaCorta {
+    final d = fecha.day.toString().padLeft(2, '0');
+    final m = fecha.month.toString().padLeft(2, '0');
+    final y = fecha.year.toString();
+    return '$d/$m/$y';
+  }
+
+  String get fechaConHora {
+    int h = fecha.hour;
+    final m = fecha.minute.toString().padLeft(2, '0');
+    final ampm = h >= 12 ? 'PM' : 'AM';
+    h = h % 12;
+    if (h == 0) h = 12;
+    final hh = h.toString().padLeft(2, '0');
+    return '${fechaCorta} $hh:$m $ampm';
+  }
 }

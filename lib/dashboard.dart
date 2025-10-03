@@ -1,159 +1,273 @@
 // Elite Ambassadors – dashboard.dart
-// Version: v0.2.1
-// - v0.2.1: Header unificado (GradientHeader rojo→negro) + KPIs, código, enlace y reingresos.
+// v0.5.2: Rangos automáticos + KPIs + botón "Ver mi red" cambia de pestaña
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+
 import 'core/locator.dart';
 import 'core/models.dart';
-import 'widgets/gradient_header.dart';
+import 'mi_red.dart';
 
-class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
-  @override
-  State<DashboardScreen> createState() => _DashboardScreenState();
-}
+class DashboardScreen extends StatelessWidget {
+  const DashboardScreen({super.key, this.onGoToRed});
 
-class _DashboardScreenState extends State<DashboardScreen> {
-  late Future<UserSummary> _future;
-  final _reingresoCtrl = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    _future = Locator.I.userRepo.getSummary();
-  }
-
-  @override
-  void dispose() {
-    _reingresoCtrl.dispose();
-    super.dispose();
-  }
+  /// Si viene este callback, lo usamos para cambiar de pestaña.
+  /// Si es null, hacemos un Navigator.push como fallback.
+  final VoidCallback? onGoToRed;
 
   @override
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
+    final uid = FirebaseAuth.instance.currentUser!.uid;
 
-    return FutureBuilder<UserSummary>(
-      future: _future,
-      builder: (context, snap) {
-        if (snap.connectionState != ConnectionState.done) {
+    return StreamBuilder<Map<String, dynamic>?>(
+      stream: Locator.I.embajadorRepo.streamActual(),
+      builder: (context, embSnap) {
+        if (embSnap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
-        if (!snap.hasData) return const Center(child: Text('Sin datos'));
+        final e = embSnap.data;
 
-        final u = snap.data!;
-        final inviteUrl = Locator.I.referralsRepo.buildInviteUrl(u.code);
-
-        return SingleChildScrollView(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              // === Header unificado rojo→negro ===
-              const GradientHeader(),
-              const SizedBox(height: 24), // <-- ESPACIO BAJO EL HEADER
-
-              // KPIs rápidos
-              _StatsGrid(
-                directos: u.directs,
-                redTotal: u.network,
-                activosMes: u.activeThisMonth,
+        if (e == null) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.person_search, size: 48),
+                  const SizedBox(height: 12),
+                  const Text('Aún no tienes ficha de embajador.', textAlign: TextAlign.center),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Pídele al admin que te dé de alta en Firestore → colección "embajadores".',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: cs.onSurfaceVariant),
+                  ),
+                ],
               ),
-              const SizedBox(height: 28),
+            ),
+          );
+        }
 
-              // Código + copiar
-              _CodigoCard(
-                codigo: u.code,
-                onCopy: () async {
-                  await Clipboard.setData(ClipboardData(text: u.code));
-                  _toast('Código copiado');
-                },
-              ),
-              const SizedBox(height: 12),
+        final nombre = (e['nombre'] ?? '').toString();
+        final foto   = (e['foto'] ?? '').toString();
+        final codigo = (e['codigo'] ?? '').toString();
+        final activo = (e['boton'] ?? e['activo'] ?? false) == true;
 
-              // Enlace + WhatsApp
-              _EnlaceCard(
-                enlace: inviteUrl,
-                onShare: () => _abrirWhatsappConTexto(
-                  '¡Hola! Te comparto mi enlace de registro a Elite Army: $inviteUrl',
-                ),
-              ),
-              const SizedBox(height: 12),
+        final inviteUrl = 'https://elite-army-mexico.crosshero.site/?ref=$codigo';
 
-              // Reingresos
-              _ReingresosCard(
-                controller: _reingresoCtrl,
-                onSend: () {
-                  final nombre = _reingresoCtrl.text.trim();
-                  if (nombre.isEmpty) return _toast('Escribe el nombre primero');
-                  final msg =
-                      'Reingreso: Favor de reactivar a *$nombre* y asignarlo a mi red. Código: ${u.code}';
-                  _abrirWhatsappConTexto(msg);
-                },
-                onClear: () => _reingresoCtrl.clear(),
+        return StreamBuilder<List<Referido>>(
+          stream: Locator.I.referidosRepo.getReferidos(uid),
+          builder: (context, rSnap) {
+            final referidos = rSnap.data ?? const <Referido>[];
+            final redTotal  = referidos.length;
+            final activos   = referidos.where((r) => r.activo).length;
+            final ganancias = activos * 100.0;
+
+            final rangoInfo     = _calcularRango(activos);
+            final rangoActual   = rangoInfo.rangoActual;
+            final proximoRango  = rangoInfo.proximoRango;
+            final progreso      = rangoInfo.progress;
+
+            return SingleChildScrollView(
+              padding: const EdgeInsets.all(28),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  // Header con avatar + rango
+                  Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      gradient: const LinearGradient(
+                        colors: [Color(0xFFB71C1C), Color(0xFF880E4F)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      children: [
+                        CircleAvatar(
+                          radius: 24,
+                          backgroundImage: (foto.isNotEmpty) ? NetworkImage(foto) : null,
+                          child: (foto.isEmpty) ? const Icon(Icons.person) : null,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                nombre.isEmpty ? 'Embajador' : nombre,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+                              ),
+                              const SizedBox(height: 2),
+                              Text('Rango actual: $rangoActual  ·  Próximo: $proximoRango',
+                                  style: const TextStyle(color: Colors.white70)),
+                              const SizedBox(height: 10),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: LinearProgressIndicator(
+                                  value: progreso.clamp(0, 1).toDouble(),
+                                  minHeight: 6,
+                                  backgroundColor: Colors.white24,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Chip(
+                          label: Text(
+                            activo ? 'ACTIVO' : 'INACTIVO',
+                            style: const TextStyle(fontWeight: FontWeight.w800, color: Colors.white),
+                          ),
+                          backgroundColor: activo ? Colors.green : Colors.red,
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  const SizedBox(height: 24),
+
+                  // KPIs
+                  GridView.count(
+                    crossAxisCount: 3,
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    childAspectRatio: 1.35,
+                    mainAxisSpacing: 12,
+                    crossAxisSpacing: 12,
+                    children: [
+                      _StatCard(label: 'Red total',      value: '$redTotal',                        icon: Icons.hub),
+                      _StatCard(label: 'Activos en red',  value: '$activos',                         icon: Icons.bolt),
+                      _StatCard(label: 'Ganancias mes',   value: '\$${ganancias.toStringAsFixed(2)}', icon: Icons.payments),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+
+                  // "Ver mi red" -> cambia de pestaña si hay callback
+                  Align(
+                    alignment: Alignment.centerRight,
+                    child: FilledButton.icon(
+                      onPressed: () {
+                        if (onGoToRed != null) {
+                          onGoToRed!(); // ✅ cambia a la pestaña "Mi Red"
+                        } else {
+                          // Fallback si alguien usa DashboardScreen suelto
+                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MiRedScreen()));
+                        }
+                      },
+                      icon: const Icon(Icons.people_alt_outlined),
+                      label: const Text('Ver mi red'),
+                    ),
+                  ),
+
+                  const SizedBox(height: 20),
+
+                  _CodigoCard(
+                    codigo: codigo.isEmpty ? '—' : codigo,
+                    onCopy: () async {
+                      await Clipboard.setData(ClipboardData(text: codigo));
+                      _toast(context, 'Código copiado');
+                    },
+                  ),
+                  const SizedBox(height: 12),
+
+                  _EnlaceCard(
+                    enlace: inviteUrl,
+                    onShare: () => _abrirWhatsappConTexto(
+                      context,
+                      '¡Hola! Te comparto mi enlace de registro a Elite Army: $inviteUrl',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  _ReingresosCard(
+                    onSend: (nombreCliente) {
+                      final n = nombreCliente.trim();
+                      if (n.isEmpty) {
+                        _toast(context, 'Escribe el nombre primero');
+                        return;
+                      }
+                      final msg = 'Reingreso: Favor de reactivar a *$n* y asignarlo a mi red. Código: $codigo';
+                      _abrirWhatsappConTexto(context, msg);
+                    },
+                  ),
+                ],
               ),
-            ],
-          ),
+            );
+          },
         );
       },
     );
   }
 
-  Future<void> _abrirWhatsappConTexto(String texto) async {
+  // ===== Helpers =====
+
+  static Future<void> _abrirWhatsappConTexto(BuildContext context, String texto) async {
     final uri = Uri.parse('https://wa.me/?text=${Uri.encodeComponent(texto)}');
     try {
-      final ok = await launchUrl(
-        uri,
-        mode: LaunchMode.externalApplication,
-        webOnlyWindowName: '_blank',
-      );
+      final ok = await launchUrl(uri, mode: LaunchMode.externalApplication, webOnlyWindowName: '_blank');
       if (!ok) {
         await Clipboard.setData(ClipboardData(text: uri.toString()));
-        _toast('No se pudo abrir WhatsApp. Enlace copiado.');
+        _toast(context, 'No se pudo abrir WhatsApp. Enlace copiado.');
       }
     } catch (_) {
       await Clipboard.setData(ClipboardData(text: uri.toString()));
-      _toast('No se pudo abrir WhatsApp. Enlace copiado.');
+      _toast(context, 'No se pudo abrir WhatsApp. Enlace copiado.');
     }
   }
 
-  void _toast(String msg) {
-    if (!mounted) return;
+  static void _toast(BuildContext context, String msg) {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
   }
-}
 
-// ================== UI helpers ==================
+  // ===== Rangos por #activos =====
+  static _RangoInfo _calcularRango(int activos) {
+    if (activos >= 100) {
+      return const _RangoInfo('Coronel', '—', 1.0);
+    } else if (activos >= 75) {
+      return _progressBetween(activos, base: 75, next: 100, actual: 'Capitán',  proximo: 'Coronel');
+    } else if (activos >= 50) {
+      return _progressBetween(activos, base: 50, next: 75, actual: 'Teniente', proximo: 'Capitán');
+    } else if (activos >= 30) {
+      return _progressBetween(activos, base: 30, next: 50, actual: 'Sargento', proximo: 'Teniente');
+    } else if (activos >= 15) {
+      return _progressBetween(activos, base: 15, next: 30, actual: 'Cabo',     proximo: 'Sargento');
+    } else {
+      final progress = activos / 15.0;
+      return _RangoInfo('Recluta', 'Cabo', progress);
+    }
+  }
 
-class _StatsGrid extends StatelessWidget {
-  const _StatsGrid({
-    required this.directos,
-    required this.redTotal,
-    required this.activosMes,
-  });
-  final int directos, redTotal, activosMes;
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-    final text = Theme.of(context).textTheme;
-    return GridView.count(
-      crossAxisCount: 3,
-      shrinkWrap: true,
-      physics: const NeverScrollableScrollPhysics(),
-      childAspectRatio: 1.35,
-      mainAxisSpacing: 12,
-      crossAxisSpacing: 12,
-      children: [
-        _StatCard(label: 'Directos', value: '$directos', icon: Icons.group_add),
-        _StatCard(label: 'Red total', value: '$redTotal', icon: Icons.hub),
-        _StatCard(label: 'Activos mes', value: '$activosMes', icon: Icons.bolt),
-      ],
-    );
+  static _RangoInfo _progressBetween(
+    int v, {
+    required int base,
+    required int next,
+    required String actual,
+    required String proximo,
+  }) {
+    final span = (next - base).toDouble();
+    final p = ((v - base) / span).clamp(0, 1).toDouble();
+    return _RangoInfo(actual, proximo, p);
   }
 }
+
+class _RangoInfo {
+  final String rangoActual;
+  final String proximoRango;
+  final double progress;
+  const _RangoInfo(this.rangoActual, this.proximoRango, this.progress);
+}
+
+// ===== UI helpers =====
 
 class _StatCard extends StatelessWidget {
   const _StatCard({required this.label, required this.value, required this.icon});
@@ -176,14 +290,8 @@ class _StatCard extends StatelessWidget {
         children: [
           Icon(icon, color: cs.primary),
           const Spacer(),
-          Text(
-            label,
-            style: text.labelLarge!.copyWith(color: cs.onSurfaceVariant),
-          ),
-          Text(
-            value,
-            style: text.headlineMedium!.copyWith(fontWeight: FontWeight.bold),
-          ),
+          Text(label, style: text.labelLarge!.copyWith(color: cs.onSurfaceVariant)),
+          Text(value, style: text.headlineMedium!.copyWith(fontWeight: FontWeight.bold)),
         ],
       ),
     );
@@ -214,10 +322,7 @@ class _CodigoCard extends StatelessWidget {
               children: [
                 Text('Tu código de invitación', style: text.titleSmall),
                 const SizedBox(height: 6),
-                Text(
-                  codigo,
-                  style: text.headlineSmall!.copyWith(fontWeight: FontWeight.bold),
-                ),
+                Text(codigo, style: text.headlineSmall!.copyWith(fontWeight: FontWeight.bold)),
               ],
             ),
           ),
@@ -262,15 +367,22 @@ class _EnlaceCard extends StatelessWidget {
   }
 }
 
-class _ReingresosCard extends StatelessWidget {
-  const _ReingresosCard({
-    required this.controller,
-    required this.onSend,
-    required this.onClear,
-  });
+class _ReingresosCard extends StatefulWidget {
+  const _ReingresosCard({required this.onSend, super.key});
+  final void Function(String nombreCliente) onSend;
 
-  final TextEditingController controller;
-  final VoidCallback onSend, onClear;
+  @override
+  State<_ReingresosCard> createState() => _ReingresosCardState();
+}
+
+class _ReingresosCardState extends State<_ReingresosCard> {
+  final _ctrl = TextEditingController();
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -287,12 +399,10 @@ class _ReingresosCard extends StatelessWidget {
         children: [
           const Text('Reingresos', style: TextStyle(fontWeight: FontWeight.w600)),
           const SizedBox(height: 8),
-          const Text(
-            'Escribe el nombre del cliente a reactivar y envía el mensaje a recepción por WhatsApp.',
-          ),
+          const Text('Escribe el nombre del cliente a reactivar y envía el mensaje a recepción por WhatsApp.'),
           const SizedBox(height: 12),
           TextField(
-            controller: controller,
+            controller: _ctrl,
             decoration: InputDecoration(
               hintText: 'Nombre del cliente a reactivar',
               filled: true,
@@ -303,9 +413,9 @@ class _ReingresosCard extends StatelessWidget {
           const SizedBox(height: 12),
           Row(
             children: [
-              FilledButton(onPressed: onSend, child: const Text('Enviar por WhatsApp')),
+              FilledButton(onPressed: () => widget.onSend(_ctrl.text), child: const Text('Enviar por WhatsApp')),
               const SizedBox(width: 12),
-              TextButton(onPressed: onClear, child: const Text('Limpiar')),
+              TextButton(onPressed: () => _ctrl.clear(), child: const Text('Limpiar')),
             ],
           ),
         ],
