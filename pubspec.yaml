@@ -10,14 +10,16 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
-  url_launcher: ^6.3.0
-  cupertino_icons: ^1.0.6
 
-  # FlutterFire (línea 2.x/4.x)
-  firebase_core: ^2.27.0
-  firebase_auth: ^4.17.8
-  cloud_firestore: ^4.15.8
-  cloud_functions: ^4.5.6   # 👈 NUEVO (compatible con core 2.x)
+  # FlutterFire
+  firebase_core: ^2.31.1
+  firebase_auth: ^4.20.0
+  cloud_firestore: ^4.17.5
+  cloud_functions: ^4.5.6   # callable functions (paquete correcto)
+  url_launcher: ^6.3.2
+  
+  # Routing
+  go_router: ^14.6.1
 
 dev_dependencies:
   flutter_test:
@@ -28,4 +30,3 @@ flutter:
   uses-material-design: true
   assets:
     - assets/images/logo.png
-

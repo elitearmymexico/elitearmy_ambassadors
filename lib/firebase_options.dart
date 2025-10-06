@@ -61,4 +61,5 @@ class DefaultFirebaseOptions {
     storageBucket: 'elitearmymx-8807f.firebasestorage.app',
     measurementId: 'G-BTNX173967',
   );
+
 }

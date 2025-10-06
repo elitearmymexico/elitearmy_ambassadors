@@ -9,6 +9,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'core/locator.dart';
 import 'core/models.dart';
 import 'mi_red.dart';
+import 'widgets/kpis.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key, this.onGoToRed});
@@ -135,20 +136,12 @@ class DashboardScreen extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  // KPIs
-                  GridView.count(
-                    crossAxisCount: 3,
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    childAspectRatio: 1.35,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
-                    children: [
-                      _StatCard(label: 'Red total',      value: '$redTotal',                        icon: Icons.hub),
-                      _StatCard(label: 'Activos en red',  value: '$activos',                         icon: Icons.bolt),
-                      _StatCard(label: 'Ganancias mes',   value: '\$${ganancias.toStringAsFixed(2)}', icon: Icons.payments),
-                    ],
-                  ),
+                  // KPIs (reemplaza tu GridView actual por esto)
+                KpiGrid(
+                        redTotal: redTotal,
+                        activos: activos,
+                        ganancias: ganancias,
+                        ),
 
                   const SizedBox(height: 12),
 

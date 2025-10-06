@@ -1,35 +1,43 @@
 <!DOCTYPE html>
-<html>
+<html lang="es">
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
-  <meta content="IE=Edge" http-equiv="X-UA-Compatible">
-  <meta name="description" content="A new Flutter project.">
+  <meta http-equiv="X-UA-Compatible" content="IE=Edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Elite Army Ambassadors WebApp">
+  <meta name="theme-color" content="#111111">
 
-  <!-- iOS meta tags & icons -->
+  <title>Elite Army Ambassadors</title>
+
+  <!-- PWA / iOS -->
   <meta name="mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
-  <meta name="apple-mobile-web-app-title" content="elite_ambassadors">
-  <link rel="apple-touch-icon" href="icons/Icon-192.png">
+  <meta name="apple-mobile-web-app-title" content="Elite Army Ambassadors">
+  <!-- usa tu ícono personalizado en iOS -->
+  <link rel="apple-touch-icon" href="icons/elite-fav-og.png">
 
-  <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
+  <!-- Favicons (pestaña del navegador) -->
+  <link rel="icon" type="image/png" sizes="32x32" href="icons/elite-fav-32.png">
+  <link rel="icon" type="image/png" sizes="16x16" href="icons/elite-fav-16.png">
+  <link rel="icon" type="image/png" href="icons/elite-fav.png">
 
-  <title>elite_ambassadors</title>
+  <!-- Open Graph (WhatsApp / Facebook preview) -->
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Elite Army Ambassadors WebApp">
+  <meta property="og:description" content="Administra tu red, bonos y logros desde tu teléfono.">
+  <!-- si hosteas la imagen en tu dominio propio, déjala absoluta; si no, usa relativa -->
+  <meta property="og:image" content="icons/elite-fav-og.png">
+  <meta property="og:url" content="https://elitearmymx.com">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Elite Army Ambassadors WebApp">
+  <meta name="twitter:description" content="Administra tu red, bonos y logros desde tu teléfono.">
+  <meta name="twitter:image" content="icons/elite-fav-og.png">
+
   <link rel="manifest" href="manifest.json">
 </head>
 <body>

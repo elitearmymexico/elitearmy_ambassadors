@@ -95,15 +95,33 @@ class Referido {
   });
 
   factory Referido.fromFirestore(String id, Map<String, dynamic> d) {
-    final altaRaw = d['alta'];
+    // ✅ FIX: usa 'fecha' (Timestamp en tu Firestore) y fallbacks
+    final altaRaw = d['fecha'] ?? d['alta'] ?? d['fecha_alta'];
     DateTime parsed;
+
     if (altaRaw is Timestamp) {
       parsed = altaRaw.toDate();
+    } else if (altaRaw is DateTime) {
+      parsed = altaRaw;
     } else if (altaRaw is int) {
-      parsed = DateTime.fromMillisecondsSinceEpoch(altaRaw);
+      // Detecta si viene en segundos o milisegundos
+      parsed = altaRaw > 2000000000
+          ? DateTime.fromMillisecondsSinceEpoch(altaRaw)
+          : DateTime.fromMillisecondsSinceEpoch(altaRaw * 1000);
     } else if (altaRaw is String) {
-      parsed = DateTime.tryParse(altaRaw) ??
-          DateTime.fromMillisecondsSinceEpoch(0);
+      final iso = DateTime.tryParse(altaRaw);
+      if (iso != null) {
+        parsed = iso;
+      } else {
+        final asInt = int.tryParse(altaRaw);
+        if (asInt != null) {
+          parsed = asInt > 2000000000
+              ? DateTime.fromMillisecondsSinceEpoch(asInt)
+              : DateTime.fromMillisecondsSinceEpoch(asInt * 1000);
+        } else {
+          parsed = DateTime.fromMillisecondsSinceEpoch(0);
+        }
+      }
     } else {
       parsed = DateTime.fromMillisecondsSinceEpoch(0);
     }

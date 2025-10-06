@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{db}/documents {
+
+    // Un usuario es admin si existe un doc /admins/{uid}
+    function isAdmin() {
+      return request.auth != null
+        && exists(/databases/$(db)/documents/admins/$(request.auth.uid));
+    }
+
+    // Maestro por email (usado por el panel)
+    match /ambassadors_master/{email} {
+      allow read, write: if isAdmin();
+    }
+
+    // Espejo por uid
+    match /embajadores/{uid} {
+      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+      allow write: if isAdmin();
+    }
+
+    // Configuración del sistema (solo admins)
+    match /settings/{doc} {
+      allow read, write: if isAdmin();
+    }
+
+    // Colección de admins (solo admins pueden leer/escribir)
+    match /admins/{uid} {
+      allow read, write: if isAdmin();
+    }
+  }
+}
