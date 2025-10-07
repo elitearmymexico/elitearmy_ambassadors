@@ -1,3 +1,4 @@
+// lib/admin_panel/login_admin.dart
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
@@ -9,116 +10,290 @@ class LoginAdminScreen extends StatefulWidget {
 }
 
 class _LoginAdminScreenState extends State<LoginAdminScreen> {
-  final _form = GlobalKey<FormState>();
-  final _emailCtrl = TextEditingController();
-  final _passCtrl = TextEditingController();
-  bool _show = false;
-  bool _loading = false;
-  String? _err;
+  final _formKey = GlobalKey<FormState>();
+  final _email = TextEditingController();
+  final _pass = TextEditingController();
+  bool _showPass = false;
+  bool _busy = false;
+  String? _msg;
 
   @override
   void dispose() {
-    _emailCtrl.dispose();
-    _passCtrl.dispose();
+    _email.dispose();
+    _pass.dispose();
     super.dispose();
   }
 
   Future<void> _login() async {
-    if (!_form.currentState!.validate()) return;
-    setState(() {
-      _loading = true;
-      _err = null;
-    });
+    if (!_formKey.currentState!.validate()) return;
+    setState(() { _busy = true; _msg = null; });
     try {
       await FirebaseAuth.instance.signInWithEmailAndPassword(
-        email: _emailCtrl.text.trim(),
-        password: _passCtrl.text,
+        email: _email.text.trim(),
+        password: _pass.text,
       );
+      // _Gate en main_admin.dart escucha authStateChanges, no hace falta navegar.
     } on FirebaseAuthException catch (e) {
-      setState(() => _err = e.message ?? e.code);
+      setState(() => _msg = e.message ?? e.code);
     } catch (e) {
-      setState(() => _err = e.toString());
+      setState(() => _msg = e.toString());
     } finally {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _resetPass() async {
+    final mail = _email.text.trim();
+    if (mail.isEmpty || !mail.contains('@')) {
+      setState(() => _msg = 'Escribe tu correo para enviarte el enlace.');
+      return;
+    }
+    try {
+      await FirebaseAuth.instance.sendPasswordResetEmail(email: mail);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Te enviamos un enlace para restablecer la contraseña.')),
+      );
+    } catch (e) {
+      setState(() => _msg = e.toString());
     }
   }
 
   @override
   Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+
     return Scaffold(
-      body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 420),
-          child: Card(
-            margin: const EdgeInsets.all(24),
-            child: Padding(
-              padding: const EdgeInsets.all(24),
-              child: Form(
-                key: _form,
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const Text(
-                      'Elite Army · Admin',
-                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-                    ),
-                    const SizedBox(height: 16),
-                    TextFormField(
-                      controller: _emailCtrl,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: const InputDecoration(
-                        labelText: 'Correo',
-                        prefixIcon: Icon(Icons.email_outlined),
-                      ),
-                      validator: (v) {
-                        if (v == null || v.trim().isEmpty) return 'Ingresa tu correo';
-                        if (!v.contains('@')) return 'Correo inválido';
-                        return null;
-                      },
-                    ),
-                    const SizedBox(height: 12),
-                    TextFormField(
-                      controller: _passCtrl,
-                      obscureText: !_show,
-                      decoration: InputDecoration(
-                        labelText: 'Contraseña',
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        suffixIcon: IconButton(
-                          onPressed: () => setState(() => _show = !_show),
-                          icon: Icon(_show ? Icons.visibility_off : Icons.visibility),
+      body: Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            colors: [Color(0xFF180032), Color(0xFF2A0F6B)],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+          ),
+        ),
+        child: Center(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 520),
+              child: Stack(
+                children: [
+                  // Marca de agua
+                  Positioned.fill(
+                    child: IgnorePointer(
+                      child: Opacity(
+                        opacity: 0.06,
+                        child: FittedBox(
+                          fit: BoxFit.contain,
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 160),
+                            child: Text(
+                              'ELITE ARMY',
+                              style: TextStyle(
+                                color: Colors.white.withOpacity(0.9),
+                                fontWeight: FontWeight.w900,
+                                letterSpacing: 10,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
-                      validator: (v) {
-                        if (v == null || v.isEmpty) return 'Ingresa tu contraseña';
-                        if (v.length < 6) return 'Mínimo 6 caracteres';
-                        return null;
-                      },
                     ),
-                    const SizedBox(height: 16),
-                    if (_err != null)
-                      Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Text(_err!, style: const TextStyle(color: Colors.redAccent)),
+                  ),
+                  Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Chip superior
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.08),
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(color: Colors.white.withOpacity(0.25)),
+                        ),
+                        child: const Text(
+                          'PANEL DE ADMINISTRADOR',
+                          style: TextStyle(
+                            letterSpacing: 1.2,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton(
-                        onPressed: _loading ? null : _login,
-                        child: _loading
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Text('Entrar'),
+                      const SizedBox(height: 28),
+
+                      // Logo
+                      SizedBox(
+                        height: 110,
+                        child: Image.asset(
+                          'assets/images/logo.png',
+                          fit: BoxFit.contain,
+                          errorBuilder: (_, __, ___) => const Icon(Icons.shield_outlined, size: 72),
+                        ),
                       ),
-                    ),
-                  ],
-                ),
+                      const SizedBox(height: 16),
+
+                      // Tarjeta “glass”
+                      Container(
+                        padding: const EdgeInsets.all(18),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withOpacity(0.07),
+                          borderRadius: BorderRadius.circular(24),
+                          border: Border.all(color: Colors.white.withOpacity(0.12)),
+                          boxShadow: const [
+                            BoxShadow(
+                              color: Colors.black26,
+                              blurRadius: 24,
+                              offset: Offset(0, 12),
+                            ),
+                          ],
+                        ),
+                        child: Form(
+                          key: _formKey,
+                          child: Column(
+                            children: [
+                              const SizedBox(height: 4),
+                              _GlassField(
+                                controller: _email,
+                                label: 'Correo',
+                                icon: Icons.email_outlined,
+                                keyboardType: TextInputType.emailAddress,
+                                validator: (v) {
+                                  final s = v?.trim() ?? '';
+                                  if (s.isEmpty) return 'Ingresa tu correo';
+                                  if (!s.contains('@')) return 'Correo inválido';
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 14),
+                              _GlassField(
+                                controller: _pass,
+                                label: 'Contraseña',
+                                icon: Icons.lock_outline,
+                                obscureText: !_showPass,
+                                trailing: IconButton(
+                                  onPressed: () => setState(() => _showPass = !_showPass),
+                                  icon: Icon(_showPass ? Icons.visibility_off : Icons.visibility),
+                                ),
+                                validator: (v) {
+                                  if (v == null || v.isEmpty) return 'Ingresa tu contraseña';
+                                  if (v.length < 6) return 'Mínimo 6 caracteres';
+                                  return null;
+                                },
+                              ),
+                              const SizedBox(height: 10),
+
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.end,
+                                children: [
+                                  TextButton(
+                                    onPressed: _busy ? null : _resetPass,
+                                    child: const Text('¿Olvidaste tu contraseña?'),
+                                  ),
+                                ],
+                              ),
+
+                              if (_msg != null) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  _msg!,
+                                  style: TextStyle(color: cs.error),
+                                  textAlign: TextAlign.center,
+                                ),
+                              ],
+
+                              const SizedBox(height: 12),
+                              SizedBox(
+                                width: double.infinity,
+                                height: 54,
+                                child: ElevatedButton(
+                                  onPressed: _busy ? null : _login,
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: const Color(0xFF815CFF),
+                                    foregroundColor: Colors.white,
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                  ),
+                                  child: _busy
+                                      ? const SizedBox(
+                                          width: 20,
+                                          height: 20,
+                                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                                        )
+                                      : const Text(
+                                          'INGRESAR',
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.w800,
+                                            letterSpacing: 1.2,
+                                          ),
+                                        ),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
               ),
             ),
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Campo “glass” reutilizable
+class _GlassField extends StatelessWidget {
+  const _GlassField({
+    required this.controller,
+    required this.label,
+    required this.icon,
+    this.keyboardType,
+    this.obscureText = false,
+    this.trailing,
+    this.validator,
+  });
+
+  final TextEditingController controller;
+  final String label;
+  final IconData icon;
+  final TextInputType? keyboardType;
+  final bool obscureText;
+  final Widget? trailing;
+  final String? Function(String?)? validator;
+
+  @override
+  Widget build(BuildContext context) {
+    final base = Colors.white.withOpacity(0.12);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14),
+      decoration: BoxDecoration(
+        color: base,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: Colors.white.withOpacity(0.14)),
+      ),
+      child: Row(
+        children: [
+          Icon(icon, color: Colors.white70),
+          const SizedBox(width: 10),
+          Expanded(
+            child: TextFormField(
+              controller: controller,
+              keyboardType: keyboardType,
+              obscureText: obscureText,
+              decoration: InputDecoration(
+                labelText: label,
+                border: InputBorder.none,
+              ),
+              validator: validator,
+            ),
+          ),
+          if (trailing != null) trailing!,
+        ],
       ),
     );
   }

@@ -15,16 +15,19 @@ service cloud.firestore {
 
     // ---- admins ----
     match /admins/{uid} {
-      // necesario para que el cliente pueda verificar su rol
       allow read: if signedIn() && request.auth.uid == uid;
       allow write: if false;
     }
 
     // ---- ambassadors_master ----
-    match /ambassadors_master/{uid} {
-      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
-      allow create: if isAdmin() && request.resource.id == uid;
-      allow update, delete: if isAdmin();
+    // Permitimos leer su propia ficha cuando el email del token coincide
+    // con el campo 'email' del documento (no dependemos del ID del doc).
+    match /ambassadors_master/{docId} {
+      allow read: if isAdmin()
+                  || (signedIn()
+                      && request.auth.token.email != null
+                      && resource.data.email == request.auth.token.email);
+      allow create, update, delete: if isAdmin();
     }
 
     // ---- settings (opcional) ----
@@ -33,7 +36,7 @@ service cloud.firestore {
       allow write: if isAdmin();
     }
 
-    // ---- embajadores (si la usas) ----
+    // ---- embajadores (legacy) ----
     match /embajadores/{doc} {
       allow read, write: if isAdmin();
     }

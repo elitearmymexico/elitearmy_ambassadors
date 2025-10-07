@@ -1,7 +1,8 @@
 // Elite Ambassadors – perfil.dart
-// v0.3.3 (live, sin userRepo)
+// v0.3.4
 // - Lee nombre/código/activo desde Firestore (por correo actual).
-// - Usa FirebaseAuth solo para conocer el correo logueado.
+// - Cambiado: ahora el código se toma de `code` y, como respaldo,
+//   de `codigo` o `Codigo` para compatibilidad hacia atrás.
 // - Botón Guardar es solo visual (no persiste) para evitar dependencias a userRepo.
 // - Cerrar sesión REAL con FirebaseAuth.
 
@@ -108,7 +109,9 @@ class _PerfilScreenState extends State<PerfilScreen> {
                 );
               }
 
-              final codigo = (d['codigo'] ?? d['Codigo'] ?? '') as String;
+              // 👇 CAMBIO: tomar primero `code`, luego `codigo`/`Codigo`
+              final codigo = ((d['code'] ?? d['codigo'] ?? d['Codigo']) ?? '')
+                  .toString();
 
               return Container(
                 padding:

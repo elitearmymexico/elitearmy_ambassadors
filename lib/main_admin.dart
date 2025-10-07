@@ -27,6 +27,10 @@ class _AdminApp extends StatelessWidget {
         useMaterial3: true,
       ),
       home: const _Gate(),
+      routes: {
+        // por si haces pushNamed desde el login
+        '/adminHome': (_) => const AdminMain(),
+      },
     );
   }
 }
@@ -39,8 +43,10 @@ class _Gate extends StatelessWidget {
     final token = idt.claims ?? {};
     if (token['admin'] == true) return true;
 
-    final doc =
-        await FirebaseFirestore.instance.collection('admins').doc(user.uid).get();
+    final doc = await FirebaseFirestore.instance
+        .collection('admins')
+        .doc(user.uid)
+        .get();
     final role = (doc.data() ?? const {})['role']?.toString().toLowerCase() ?? '';
     return role == 'owner' || role == 'admin';
   }
@@ -51,20 +57,24 @@ class _Gate extends StatelessWidget {
       stream: FirebaseAuth.instance.authStateChanges(),
       builder: (context, snap) {
         if (snap.connectionState == ConnectionState.waiting) {
-          return const Scaffold(body: Center(child: CircularProgressIndicator()));
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
         }
         final user = snap.data;
-        if (user == null) return const LoginAdminScreen();
+        if (user == null) return LoginAdminScreen(); // ← sin const
 
         return FutureBuilder<bool>(
           future: _isAdmin(user),
           builder: (context, adminSnap) {
             if (adminSnap.connectionState == ConnectionState.waiting) {
-              return const Scaffold(body: Center(child: CircularProgressIndicator()));
+              return const Scaffold(
+                body: Center(child: CircularProgressIndicator()),
+              );
             }
             if (adminSnap.hasError || adminSnap.data != true) {
               FirebaseAuth.instance.signOut();
-              return const LoginAdminScreen();
+              return LoginAdminScreen(); // ← sin const
             }
             return const AdminMain();
           },
@@ -87,7 +97,7 @@ class _AdminMainState extends State<AdminMain> {
   @override
   Widget build(BuildContext context) {
     final pages = <Widget>[
-      EmbajadoresAdminPage(),   // ← SIN const
+      EmbajadoresAdminPage(), // sin const
       const _ConfigPage(),
     ];
     final titles = <String>['Embajadores', 'Configuración'];
@@ -99,7 +109,7 @@ class _AdminMainState extends State<AdminMain> {
         selectedIndex: _index,
         destinations: const [
           NavigationDestination(icon: Icon(Icons.badge_outlined), label: 'Embajadores'),
-          NavigationDestination(icon: Icon(Icons.settings_outlined), label: 'Config'),
+        NavigationDestination(icon: Icon(Icons.settings_outlined), label: 'Config'),
         ],
         onDestinationSelected: (i) => setState(() => _index = i),
       ),
@@ -122,8 +132,10 @@ class _ConfigPage extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text('PANEL DE ADMINISTRADOR',
-                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600)),
+                const Text(
+                  'PANEL DE ADMINISTRADOR',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                ),
                 const SizedBox(height: 12),
                 Text(
                   FirebaseAuth.instance.currentUser?.email ?? '',
@@ -135,7 +147,9 @@ class _ConfigPage extends StatelessWidget {
                     await FirebaseAuth.instance.signOut();
                     if (context.mounted) {
                       Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const LoginAdminScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => LoginAdminScreen(), // ← sin const
+                        ),
                         (r) => false,
                       );
                     }

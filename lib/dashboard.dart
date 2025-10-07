@@ -1,5 +1,5 @@
 // Elite Ambassadors – dashboard.dart
-// v0.5.2: Rangos automáticos + KPIs + botón "Ver mi red" cambia de pestaña
+// v0.5.3: usa e['code'] con fallback a e['codigo'] para el código de invitación
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -55,9 +55,13 @@ class DashboardScreen extends StatelessWidget {
 
         final nombre = (e['nombre'] ?? '').toString();
         final foto   = (e['foto'] ?? '').toString();
-        final codigo = (e['codigo'] ?? '').toString();
+
+        // 🔁 AHORA: prioriza `code`; si no existe, usa `codigo`
+        final codigo = (e['code'] ?? e['codigo'] ?? '').toString();
+
         final activo = (e['boton'] ?? e['activo'] ?? false) == true;
 
+        // Si quieres cambiar el dominio del referido, hazlo aquí
         final inviteUrl = 'https://elite-army-mexico.crosshero.site/?ref=$codigo';
 
         return StreamBuilder<List<Referido>>(
@@ -136,25 +140,26 @@ class DashboardScreen extends StatelessWidget {
 
                   const SizedBox(height: 24),
 
-                  // KPIs (reemplaza tu GridView actual por esto)
-                KpiGrid(
-                        redTotal: redTotal,
-                        activos: activos,
-                        ganancias: ganancias,
-                        ),
+                  // KPIs
+                  KpiGrid(
+                    redTotal: redTotal,
+                    activos: activos,
+                    ganancias: ganancias,
+                  ),
 
                   const SizedBox(height: 12),
 
-                  // "Ver mi red" -> cambia de pestaña si hay callback
+                  // "Ver mi red"
                   Align(
                     alignment: Alignment.centerRight,
                     child: FilledButton.icon(
                       onPressed: () {
                         if (onGoToRed != null) {
-                          onGoToRed!(); // ✅ cambia a la pestaña "Mi Red"
+                          onGoToRed!();
                         } else {
-                          // Fallback si alguien usa DashboardScreen suelto
-                          Navigator.of(context).push(MaterialPageRoute(builder: (_) => const MiRedScreen()));
+                          Navigator.of(context).push(
+                            MaterialPageRoute(builder: (_) => const MiRedScreen()),
+                          );
                         }
                       },
                       icon: const Icon(Icons.people_alt_outlined),
@@ -165,7 +170,7 @@ class DashboardScreen extends StatelessWidget {
                   const SizedBox(height: 20),
 
                   _CodigoCard(
-                    codigo: codigo.isEmpty ? '—' : codigo,
+                    codigo: (codigo.isEmpty) ? '—' : codigo,
                     onCopy: () async {
                       await Clipboard.setData(ClipboardData(text: codigo));
                       _toast(context, 'Código copiado');
@@ -189,7 +194,8 @@ class DashboardScreen extends StatelessWidget {
                         _toast(context, 'Escribe el nombre primero');
                         return;
                       }
-                      final msg = 'Reingreso: Favor de reactivar a *$n* y asignarlo a mi red. Código: $codigo';
+                      final msg =
+                          'Reingreso: Favor de reactivar a *$n* y asignarlo a mi red. Código: $codigo';
                       _abrirWhatsappConTexto(context, msg);
                     },
                   ),
