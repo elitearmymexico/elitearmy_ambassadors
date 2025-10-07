@@ -1,85 +1,122 @@
-// functions/src/ambassadors.ts
-import * as admin from 'firebase-admin';
-// 👇 Fuerza a v1 (no v2)
-import * as functions from 'firebase-functions/v1';
+import { onCall, HttpsError } from "firebase-functions/v2/https";
+import { setGlobalOptions, logger } from "firebase-functions/v2";
+import * as admin from "firebase-admin";
 
-admin.initializeApp();
-
-async function assertIsAdmin(ctx: functions.https.CallableContext) {
-  if (!ctx.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Inicia sesión.');
-  }
-  const uid = ctx.auth.uid;
-
-  // 1) custom claims
-  const user = await admin.auth().getUser(uid);
-  const claims = (user.customClaims || {}) as Record<string, unknown>;
-  if (claims['admin'] === true) return;
-
-  // 2) respaldo: colección admins/{uid} con role: owner|admin
-  const snap = await admin.firestore().collection('admins').doc(uid).get();
-  const role = (snap.data()?.role || '').toString().toLowerCase();
-  if (role === 'owner' || role === 'admin') return;
-
-  throw new functions.https.HttpsError(
-    'permission-denied',
-    'Solo administradores pueden crear usuarios.'
-  );
+if (!admin.apps.length) {
+  admin.initializeApp();
 }
 
-/** Crea un usuario en Auth (email+password). NO toca Firestore */
-export const createAuthUser = functions
-  .region('us-central1')
-  .https.onCall(async (data: any, context: functions.https.CallableContext) => {
-    await assertIsAdmin(context);
+// todas las funciones en us-central1
+setGlobalOptions({ region: "us-central1", maxInstances: 10 });
 
-    const email = (data?.email || '').toString().trim();
-    const password = (data?.password || '').toString();
+async function assertIsAdmin(uid: string) {
+  if (!uid) throw new HttpsError("unauthenticated", "No autenticado.");
+  // Admin SDK ignora reglas, perfecto para backend
+  const snap = await admin.firestore().doc(`admins/${uid}`).get();
+  const role = (snap.data()?.role || "").toString().toLowerCase();
+  if (!(role === "owner" || role === "admin")) {
+    throw new HttpsError(
+      "permission-denied",
+      "No tienes rol de administrador."
+    );
+  }
+}
 
+/**
+ * Crea usuario en Auth y su ficha en ambassadors_master (ID = UID).
+ * data: { email: string, password: string }
+ */
+export const adminCreateUser = onCall(async (request) => {
+  try {
+    const authCtx = request.auth;
+    if (!authCtx) throw new HttpsError("unauthenticated", "No autenticado.");
+    await assertIsAdmin(authCtx.uid);
+
+    const email = String(request.data?.email || "").trim().toLowerCase();
+    const password = String(request.data?.password || "");
     if (!email || !password) {
-      throw new functions.https.HttpsError(
-        'invalid-argument',
-        'email y password son requeridos.'
+      throw new HttpsError(
+        "invalid-argument",
+        "Faltan email o contraseña."
       );
     }
 
+    // crear (o recuperar) usuario
+    let userRecord: admin.auth.UserRecord;
     try {
-      const user = await admin.auth().createUser({
-        email,
-        password,
-        emailVerified: false,
-        disabled: false,
-      });
-      return { ok: true, uid: user.uid };
-    } catch (err: any) {
-      if (err?.code === 'auth/email-already-exists') {
-        throw new functions.https.HttpsError('already-exists', 'El correo ya está registrado.');
+      userRecord = await admin.auth().createUser({ email, password });
+    } catch (e: any) {
+      // si ya existe, lo obtenemos para continuar
+      if (e?.code === "auth/email-already-exists") {
+        userRecord = await admin.auth().getUserByEmail(email);
+      } else {
+        logger.error("createUser error", e);
+        throw new HttpsError("internal", "No se pudo crear el usuario.");
       }
-      throw new functions.https.HttpsError('internal', err?.message || 'Error interno.');
-    }
-  });
-
-/** (Opcional) Marcar admin por correo (una sola vez para tu cuenta) */
-export const setAdminByEmail = functions
-  .region('us-central1')
-  .https.onCall(async (data: any, context: functions.https.CallableContext) => {
-    await assertIsAdmin(context);
-
-    const email = (data?.email || '').toString().trim();
-    if (!email) {
-      throw new functions.https.HttpsError('invalid-argument', 'email requerido.');
     }
 
-    const user = await admin.auth().getUserByEmail(email);
-    await admin.auth().setCustomUserClaims(user.uid, { admin: true });
-    await admin.firestore().collection('admins').doc(user.uid).set(
+    const uid = userRecord.uid;
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    // upsert de la ficha
+    await admin.firestore().doc(`ambassadors_master/${uid}`).set(
       {
         email,
-        role: 'owner',
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        status: "active",
+        activo: true,
+        createdAt: now,
+        statusUpdatedAt: now,
       },
       { merge: true }
     );
 
-    return { ok: true, uid: user.uid };
-  });
+    return { ok: true, uid };
+  } catch (e: any) {
+    if (e instanceof HttpsError) throw e;
+    logger.error("adminCreateUser fatal", e);
+    throw new HttpsError("internal", "internal");
+  }
+});
+
+/**
+ * Activa embajador por email: crea/actualiza su ficha en ambassadors_master.
+ * data: { email: string }
+ */
+export const adminActivateByEmail = onCall(async (request) => {
+  try {
+    const authCtx = request.auth;
+    if (!authCtx) throw new HttpsError("unauthenticated", "No autenticado.");
+    await assertIsAdmin(authCtx.uid);
+
+    const email = String(request.data?.email || "").trim().toLowerCase();
+    if (!email) {
+      throw new HttpsError("invalid-argument", "Email requerido.");
+    }
+
+    const user = await admin.auth().getUserByEmail(email);
+    const uid = user.uid;
+    const now = admin.firestore.FieldValue.serverTimestamp();
+
+    await admin.firestore().doc(`ambassadors_master/${uid}`).set(
+      {
+        email,
+        status: "active",
+        activo: true,
+        statusUpdatedAt: now,
+      },
+      { merge: true }
+    );
+
+    return { ok: true, uid };
+  } catch (e: any) {
+    if (e instanceof HttpsError) throw e;
+    if (e?.code === "auth/user-not-found") {
+      throw new HttpsError(
+        "not-found",
+        "Ese correo no existe en Auth. Crea primero la cuenta."
+      );
+    }
+    logger.error("adminActivateByEmail fatal", e);
+    throw new HttpsError("internal", "internal");
+  }
+});

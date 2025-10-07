@@ -1,31 +1,40 @@
 rules_version = '2';
 service cloud.firestore {
-  match /databases/{db}/documents {
+  match /databases/{database}/documents {
 
-    // Un usuario es admin si existe un doc /admins/{uid}
+    function signedIn() { return request.auth != null; }
+
     function isAdmin() {
-      return request.auth != null
-        && exists(/databases/$(db)/documents/admins/$(request.auth.uid));
+      return signedIn() &&
+        get(/databases/$(database)/documents/admins/$(request.auth.uid))
+          .data.role in ['owner', 'admin'];
     }
 
-    // Maestro por email (usado por el panel)
-    match /ambassadors_master/{email} {
-      allow read, write: if isAdmin();
+    // Bloqueo por defecto
+    match /{document=**} { allow read, write: if false; }
+
+    // ---- admins ----
+    match /admins/{uid} {
+      // necesario para que el cliente pueda verificar su rol
+      allow read: if signedIn() && request.auth.uid == uid;
+      allow write: if false;
     }
 
-    // Espejo por uid
-    match /embajadores/{uid} {
-      allow read: if isAdmin() || (request.auth != null && request.auth.uid == uid);
+    // ---- ambassadors_master ----
+    match /ambassadors_master/{uid} {
+      allow read: if isAdmin() || (signedIn() && request.auth.uid == uid);
+      allow create: if isAdmin() && request.resource.id == uid;
+      allow update, delete: if isAdmin();
+    }
+
+    // ---- settings (opcional) ----
+    match /settings/{doc} {
+      allow read: if true;
       allow write: if isAdmin();
     }
 
-    // Configuración del sistema (solo admins)
-    match /settings/{doc} {
-      allow read, write: if isAdmin();
-    }
-
-    // Colección de admins (solo admins pueden leer/escribir)
-    match /admins/{uid} {
+    // ---- embajadores (si la usas) ----
+    match /embajadores/{doc} {
       allow read, write: if isAdmin();
     }
   }
